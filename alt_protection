@@ -1,0 +1,11 @@
+#!/usr/bin/python3
+
+import sys
+
+if __file__.endswith("./altcenter"):
+    data_dir = "."
+else: 
+    data_dir = "/usr/share/altcenter"
+    sys.path.append(data_dir)
+
+import mainwindow
