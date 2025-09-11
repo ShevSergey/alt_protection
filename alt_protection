@@ -2,10 +2,10 @@
 
 import sys
 
-if __file__.endswith("./altcenter"):
+if __file__.endswith("./alt_protection"):
     data_dir = "."
 else: 
-    data_dir = "/usr/share/altcenter"
+    data_dir = "/usr/share/alt_protection"
     sys.path.append(data_dir)
 
 import mainwindow
