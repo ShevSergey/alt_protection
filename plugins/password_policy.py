@@ -211,7 +211,6 @@ class PasswordWidget(QWidget):
     def _pwq_args_from_state(self, st: Dict[str, Any]) -> str:
         args = [
             "retry=3",
-            "try_first_pass",
             f"minlen={int(st.get('minlen', 8))}",
             f"difok={int(st.get('difok', 3))}",
             f"lcredit={-abs(int(st.get('req_l', 0)))}",
@@ -238,31 +237,37 @@ class PasswordWidget(QWidget):
         return target
 
     def _pam_render_block(self, states: Dict[str, Dict[str, Any]], sel_groups: List[str]) -> str:
-        if not sel_groups: return ""
         lines = [PAM_MARK_BEGIN]
+        def sal_opts() -> List[str]:
+            p = PAM_DIR / "system-auth-local-only"
+            try:
+                t = p.read_text(encoding="utf-8", errors="ignore").splitlines()
+            except Exception:
+                t = []
+            for ln in t:
+                s = ln.strip()
+                if not s or s.startswith("#"): continue
+                m = re.match(r'^\s*password\s+\S+\s+\S+\s+pam_tcb\.so\b(.*)$', s, flags=re.IGNORECASE)
+                if m:
+                    tail = (m.group(1) or "").strip()
+                    opts = tail.split() if tail else []
+                    if "use_authtok" not in opts:
+                        opts = ["use_authtok"] + opts
+                    return opts
+            return ["use_authtok", "shadow", "fork", "nullok", "write_to=tcb"]
 
         def add_pair(st: Dict[str, Any]):
-            # 1) качество
-            if self._module_kind == "pwquality":
-                lines.append(f"password   requisite                     pam_pwquality.so {self._pwq_args_from_state(st)}")
-            else:
-                cfg_path = str(PASSWDQC_CONF)
-                lines.append(f"password   requisite                     pam_passwdqc.so config={cfg_path} retry=3")
-            # 2) история
-            lines.append(
-                "password   requisite                     pam_pwhistory.so "
-                f"use_authtok remember={int(st.get('remember',5))} enforce_for_root"
-            )
+            lines.append(f"password   requisite                     pam_pwquality.so {self._pwq_args_from_state(st)}")
+            lines.append("password   requisite                     pam_pwhistory.so use_authtok remember={r} enforce_for_root".format(r=int(st.get('remember',5))))
 
-        if "*ALL*" in sel_groups:
-            st = states.get("*ALL*", {})
-            add_pair(st)
+        if "*ALL*" in sel_groups or not sel_groups:
+            add_pair(states.get("*ALL*", {}))
         else:
             for g in sorted(set(sel_groups)):
-                st = states.get(g, {})
                 lines.append(f"password   [success=2 default=ignore]   pam_succeed_if.so user notingroup {g}")
-                add_pair(st)
+                add_pair(states.get(g, {}))
 
+        lines.append("password        required                  pam_tcb.so " + " ".join(sal_opts()))
         lines.append(PAM_MARK_END)
         return "\n".join(lines) + "\n"
 
@@ -291,6 +296,30 @@ class PasswordWidget(QWidget):
         return re.sub(r"\n{3,}", "\n\n", "\n".join(rebuilt))
 
     def _pam_install_block(self, block_text: str) -> bool:
+        prot_inc = PAM_DIR / "system-auth.protection-alt"
+        try:
+            if prot_inc.exists():
+                shutil.copy2(prot_inc, prot_inc.with_suffix(".bak"))
+        except Exception:
+            pass
+        try:
+            with prot_inc.open("w", encoding="utf-8") as f:
+                f.write(block_text)
+        except Exception:
+            return False
+
+        try:
+            sec = Path("/etc/security")
+            sec.mkdir(mode=0o755, exist_ok=True)
+            op = sec / "opasswd"
+            if not op.exists():
+                with open(op, "x", encoding="utf-8"): pass
+            try: os.chown(op, 0, 0)
+            except Exception: pass
+            os.chmod(op, 0o600)
+        except Exception:
+            pass
+
         if not PAM_PASSWD.exists(): return False
         try:
             orig = PAM_PASSWD.read_text(encoding="utf-8", errors="ignore")
@@ -302,35 +331,47 @@ class PasswordWidget(QWidget):
             "",
             orig, flags=re.DOTALL
         )
-        base = self._pam_strip_legacy_quality_lines(base)
 
         lines = base.splitlines()
+        pat_sys  = re.compile(r'^\s*password\s+include\s+system-auth(?:\s+.*)?$', re.IGNORECASE)
+        pat_prot = re.compile(r'^\s*password\s+include\s+system-auth\.protection-alt(?:\s+.*)?$', re.IGNORECASE)
+        pat_unix = re.compile(r'^\s*password\s+\S+\s+pam_unix\.so\b', re.IGNORECASE)
+        pat_tcb  = re.compile(r'^\s*password\s+\S+\s+pam_tcb\.so\b', re.IGNORECASE)
 
-        idx_insert = -1
-        pat_include = re.compile(r'^\s*password\s+include\s+system-auth\b')
-        for i, ln in enumerate(lines):
-            if pat_include.search(ln) or ("pam_tcb.so" in ln and ln.strip().startswith("password")):
-                idx_insert = i; break
+        new_lines: List[str] = []
+        have_prot = False
+        for s in lines:
+            if pat_unix.match(s):  continue
+            if pat_tcb.match(s):   continue
+            if pat_sys.match(s):
+                new_lines.append("password        include         system-auth.protection-alt")
+                have_prot = True
+                continue
+            if pat_prot.match(s):
+                if not have_prot:
+                    new_lines.append("password        include         system-auth.protection-alt")
+                    have_prot = True
+                continue
+            new_lines.append(s)
 
-        out = []
-        if idx_insert >= 0:
-            out.extend(lines[:idx_insert])
-            if block_text.strip():
-                out.append(block_text.rstrip("\n"))
-            out.append("password        required        pam_tcb.so use_authtok")
-            out.extend(lines[idx_insert+1:])
-        else:
-            if block_text.strip():
-                out = lines + ["", block_text.rstrip("\n"), "password        required        pam_tcb.so use_authtok"]
-            else:
-                out = lines + ["", "password        required        pam_tcb.so use_authtok"]
+        if not have_prot:
+            ins = []
+            inserted = False
+            for s in new_lines:
+                if (not inserted) and s.strip().lower().startswith("session"):
+                    ins.append("password        include         system-auth.protection-alt")
+                    inserted = True
+                ins.append(s)
+            if not inserted:
+                ins.append("password        include         system-auth.protection-alt")
+            new_lines = ins
 
         try:
             shutil.copy2(PAM_PASSWD, PAM_PASSWD.with_suffix(".bak.pam"))
         except Exception:
             pass
         try:
-            text = "\n".join(out) + "\n"
+            text = "\n".join(new_lines) + "\n"
             text = re.sub(r"\n{3,}", "\n\n", text)
             PAM_PASSWD.write_text(text, encoding="utf-8")
             return True
