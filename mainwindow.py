@@ -130,7 +130,7 @@ class MainWindow(QWidget, Ui_MainWindow):
 
     def closeEvent(self, event):
         if self.block_close:
-            QMessageBox.warning(self, "Операция выполняется", "Нельзя закрыть окно во время установки или обновления.")
+            QMessageBox.warning(self, "Operation in progress", "Cannot close the window during installation or update.")
             event.ignore()
         else:
             event.accept()

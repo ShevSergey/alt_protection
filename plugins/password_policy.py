@@ -54,14 +54,14 @@ class PasswordWidget(QWidget):
         v = QVBoxLayout(self)
 
         top = QHBoxLayout()
-        self.btn_enable_pwq = QPushButton(self.tr("Установить/включить pam_pwquality"))
+        self.btn_enable_pwq = QPushButton(self.tr("Install/enable pam_pwquality"))
         top.addWidget(self.btn_enable_pwq); top.addStretch(1)
         v.addLayout(top)
 
-        v.addWidget(QLabel(self.tr("Группы, к которым применяется политика:")))
+        v.addWidget(QLabel(self.tr("Groups to which the policy applies:")))
         self.list_groups = QListWidget(); self.list_groups.setSelectionMode(QListWidget.MultiSelection)
         v.addWidget(self.list_groups, 1)
-        self.lbl_active = QLabel(self.tr("Активная группа: —"))
+        self.lbl_active = QLabel(self.tr("Active group: —"))
         f = QFont(); f.setBold(True); self.lbl_active.setFont(f)
         v.addWidget(self.lbl_active)
 
@@ -73,25 +73,25 @@ class PasswordWidget(QWidget):
         self.sp_d = QSpinBox(); self.sp_d.setRange(0,16); self.sp_d.setKeyboardTracking(False)
         self.sp_o = QSpinBox(); self.sp_o.setRange(0,16); self.sp_o.setKeyboardTracking(False)
         self.sp_remember = QSpinBox(); self.sp_remember.setRange(1,10); self.sp_remember.setKeyboardTracking(False)
-        self.chk_user = QCheckBox(self.tr("Проверка имени пользователя"))
-        self.chk_gecos = QCheckBox(self.tr("Проверка GECOS"))
-        self.chk_root = QCheckBox(self.tr("Применять для root"))
+        self.chk_user = QCheckBox(self.tr("Check username"))
+        self.chk_gecos = QCheckBox(self.tr("Check GECOS"))
+        self.chk_root = QCheckBox(self.tr("Enforce for root"))
 
-        form.addRow(self.tr("Минимальная длина пароля"), self.sp_min)
-        form.addRow(self.tr("Минимум изменённых символов"), self.sp_difok)
-        form.addRow(self.tr("Мин. строчных"), self.sp_l)
-        form.addRow(self.tr("Мин. заглавных"), self.sp_u)
-        form.addRow(self.tr("Мин. цифр"), self.sp_d)
-        form.addRow(self.tr("Мин. других символов"), self.sp_o)
-        form.addRow(self.tr("Запрет на повтор последних N паролей"), self.sp_remember)
+        form.addRow(self.tr("Minimum password length"), self.sp_min)
+        form.addRow(self.tr("Minimum changed characters"), self.sp_difok)
+        form.addRow(self.tr("Minimum lowercase"), self.sp_l)
+        form.addRow(self.tr("Minimum uppercase"), self.sp_u)
+        form.addRow(self.tr("Minimum digits"), self.sp_d)
+        form.addRow(self.tr("Minimum other characters"), self.sp_o)
+        form.addRow(self.tr("Forbid reuse of last N passwords"), self.sp_remember)
         form.addRow(self.chk_user)
         form.addRow(self.chk_gecos)
         form.addRow(self.chk_root)
         v.addLayout(form)
 
         btns = QHBoxLayout()
-        self.btn_apply = QPushButton(self.tr("Применить"))
-        self.btn_reset = QPushButton(self.tr("Сбросить"))
+        self.btn_apply = QPushButton(self.tr("Apply"))
+        self.btn_reset = QPushButton(self.tr("Reset"))
         btns.addWidget(self.btn_apply); btns.addWidget(self.btn_reset); btns.addStretch(1)
         v.addLayout(btns)
 
@@ -416,7 +416,7 @@ class PasswordWidget(QWidget):
         self.list_groups.clear()
         gid_min = self._gid_min()
 
-        it_all = QListWidgetItem(self.tr("Все группы"))
+        it_all = QListWidgetItem(self.tr("All groups"))
         it_all.setData(Qt.UserRole, "__ALL__")
         self.list_groups.addItem(it_all)
 
@@ -426,7 +426,7 @@ class PasswordWidget(QWidget):
             self.list_groups.addItem(it)
 
         self._active_group = "*ALL*"
-        self.lbl_active.setText(self.tr("Активная группа: Все группы"))
+        self.lbl_active.setText(self.tr("Active group: All groups"))
         self.list_groups.item(0).setSelected(True)
 
     def _selected_groups(self) -> List[str]:
@@ -467,12 +467,12 @@ class PasswordWidget(QWidget):
         items = self.list_groups.selectedItems()
         if not items:
             self._active_group = None
-            self.lbl_active.setText(self.tr("Активная группа: —"))
+            self.lbl_active.setText(self.tr("Active group: —"))
             return
         last = items[-1]
         key = last.data(Qt.UserRole)
         self._active_group = "*ALL*" if key == "__ALL__" else str(key)
-        self.lbl_active.setText(self.tr("Активная группа: ") + (self.tr("Все группы") if self._active_group=="*ALL*" else self._active_group))
+        self.lbl_active.setText(self.tr("Active group: ") + (self.tr("All groups") if self._active_group=="*ALL*" else self._active_group))
 
         st = self._group_state.get(self._active_group)
         if st is None:
@@ -528,16 +528,16 @@ class PasswordWidget(QWidget):
 
     def _validate(self) -> Tuple[bool, str]:
         if self.sp_min.value() < 6:
-            return False, self.tr("Минимальная длина менее 6 небезопасна.")
+            return False, self.tr("Minimum length less than 6 is unsafe.")
         if self._module_kind == "pwquality":
             req_sum = self.sp_l.value()+self.sp_u.value()+self.sp_d.value()+self.sp_o.value()
             if req_sum > self.sp_min.value():
-                return False, self.tr("Сумма минимальных классов больше минимальной длины.")
+                return False, self.tr("Sum of required character classes exceeds the minimum length.")
             if self.sp_difok.value() > self.sp_min.value():
-                return False, self.tr("«Минимум изменённых символов» больше минимальной длины.")
+                return False, self.tr("“Minimum changed characters” exceeds the minimum length")
         sel = self._selected_groups()
         if not sel:
-            return False, self.tr("Не выбраны группы.")
+            return False, self.tr("No groups selected.")
         return True, ""
 
     def _install_pwquality_pkgs(self) -> bool:
@@ -552,32 +552,32 @@ class PasswordWidget(QWidget):
 
     def _on_enable_pwquality(self):
         if not self._is_root():
-            QMessageBox.warning(self, "pam_pwquality", self.tr("Нужны root-права (pkexec) для установки и настройки."))
+            QMessageBox.warning(self, "pam_pwquality", self.tr("Root privileges (pkexec) are required for installation and configuration."))
             return
         installed = check_package_installed("libpwquality")
         if not installed:
             ret = QMessageBox.question(
-                self, self.tr("Установка pam_pwquality"),
-                self.tr("Для требований по классам символов нужен pam_pwquality.\nУстановить пакеты libpwquality?"),
+                self, self.tr("pam_pwquality installation"),
+                self.tr("pam_pwquality is required to enforce character class requirements.\nInstall libpwquality packages?"),
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes
             )
             if ret != QMessageBox.Yes:
                 return
             if not self._install_pwquality_pkgs():
-                QMessageBox.critical(self, self.tr("Установка"), self.tr("Не удалось установить пакеты. Проверьте интернет/репозитории."))
+                QMessageBox.critical(self, self.tr("Installation"), self.tr("Failed to install packages. Check Internet/repositories."))
                 return
         self._module_kind = "pwquality"
         self._update_controls_enabled()
         self._load()
-        QMessageBox.information(self, self.tr("Готово"), self.tr("pam_pwquality готов. Задайте параметры для группы и примените."))
+        QMessageBox.information(self, self.tr("Done"), self.tr("pam_pwquality is ready. Set group parameters and apply."))
 
     def _on_apply(self):
         if not self._is_root():
-            QMessageBox.critical(self, self.tr("Ошибка"), self.tr("Недостаточно прав. Запустите через pkexec."))
+            QMessageBox.critical(self, self.tr("Error"), self.tr("Insufficient privileges. Run via pkexec."))
             return
         ok, msg = self._validate()
         if not ok:
-            QMessageBox.warning(self, self.tr("Проверка параметров"), msg); return
+            QMessageBox.warning(self, self.tr("Parameter validation"), msg); return
         try:
             if self._active_group:
                 self._group_state[self._active_group] = self._state_from_form()
@@ -601,13 +601,13 @@ class PasswordWidget(QWidget):
 
             block = self._pam_render_block(states, sel)
             if not self._pam_install_block(block):
-                QMessageBox.critical(self, "PAM", self.tr("Не удалось обновить /etc/pam.d/passwd.")); return
+                QMessageBox.critical(self, "PAM", self.tr("Failed to update /etc/pam.d/passwd.")); return
 
             self._policies_write(self._group_state)
 
-            QMessageBox.information(self, self.tr("Готово"), self.tr("Настройки применены."))
+            QMessageBox.information(self, self.tr("Done"), self.tr("Settings applied."))
         except Exception as e:
-            QMessageBox.critical(self, self.tr("Ошибка"), self.tr("Не удалось применить: ") + str(e))
+            QMessageBox.critical(self, self.tr("Error"), self.tr("Failed to apply: ") + str(e))
 
     def _on_reset(self):
         d = self._read_defaults_yml()
@@ -639,7 +639,7 @@ class PasswordWidget(QWidget):
 
         ok, msg = self._validate()
         if not ok:
-            QMessageBox.warning(self, self.tr("Сброс — проверка параметров"), msg); return
+            QMessageBox.warning(self, self.tr("Reset — parameter validation"), msg); return
         try:
             sel = self._selected_groups()
 
@@ -660,19 +660,19 @@ class PasswordWidget(QWidget):
 
             block = self._pam_render_block(states, sel)
             if not self._pam_install_block(block):
-                QMessageBox.critical(self, self.tr("Сброс"), self.tr("Не удалось обновить /etc/pam.d/passwd.")); return
+                QMessageBox.critical(self, self.tr("Reset"), self.tr("Failed to update /etc/pam.d/passwd.")); return
 
             self._policies_write(self._group_state)
-            QMessageBox.information(self, self.tr("Сброс"), self.tr("Значения восстановлены и применены."))
+            QMessageBox.information(self, self.tr("Reset"), self.tr("Values restored and applied."))
         except Exception as e:
-            QMessageBox.critical(self, self.tr("Сброс"), self.tr("Не удалось применить значения: ") + str(e))
+            QMessageBox.critical(self, self.tr("Reset"), self.tr("Failed to apply values: ") + str(e))
 
 
 class PasswordPlugin(plugins.Base):
     def __init__(self, plist=None, pane: QStackedWidget = None):
         super().__init__("password_policy", 20, plist, pane)
         if self.plist is not None and self.pane is not None:
-            node = QStandardItem(self.tr("Параметры пароля"))
+            node = QStandardItem(self.tr("Password parameters"))
             node.setData(self.name)
             self.plist.appendRow([node])
             self.pane.addWidget(QWidget())
