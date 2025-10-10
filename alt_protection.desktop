@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=ALT Protection
+Name[ru]=Альт Защита
+GenericName=ALT Protection
+GenericName[ru]=Альт Защита
+Comment=Application to configure system security
+Comment[ru]=Приложение для настройки безопасности системы
+Exec=alt_protection
+Icon=preferences
+Categories=Settings;System;
