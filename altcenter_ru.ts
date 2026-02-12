@@ -122,7 +122,7 @@
     <message>
         <location filename="plugins/password_policy.py" line="85"/>
         <source>Minimum other characters</source>
-        <translation>дМинимум других символов</translation>
+        <translation>Минимум других символов</translation>
     </message>
     <message>
         <location filename="plugins/password_policy.py" line="86"/>
