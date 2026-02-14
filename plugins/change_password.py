@@ -26,11 +26,57 @@ class ChangePassword(QWidget):
         super().__init__()
         if palette:
             self.setPalette(palette)
+        self._build_ui()
+
+    def _build_ui(self) -> None:
+        v = QVBoxLayout(self)
+
+        title = QLabel(self.tr("Change password"))
+        f = QFont()
+        f.setBold(True)
+        title.setFont(f)
+        v.addWidget(title)
+
+        row = QHBoxLayout()
+
+        self.ed_pass = QLineEdit()
+        self.ed_pass.setReadOnly(True)
+        self.ed_pass.setEchoMode(QLineEdit.Password)
+        self.ed_pass.setPlaceholderText(self.tr("Click “Generate” to create a password"))
+        row.addWidget(self.ed_pass, 1)
+
+        self.btn_copy = QPushButton(self.tr("Copy"))
+        self.btn_gen = QPushButton(self.tr("Generate"))
+        row.addWidget(self.btn_copy)
+        row.addWidget(self.btn_gen)
+
+        v.addLayout(row)
+        v.addStretch(1)
+
+        self.btn_gen.clicked.connect(self._on_generate)
+        self.btn_copy.clicked.connect(self._on_copy)
+
+    def _random_password_12(self) -> str:
+        alphabet = string.ascii_letters + string.digits
+        return "".join(secrets.choice(alphabet) for _ in range(12))
+
+    def _on_generate(self) -> None:
+        self.ed_pass.setText(self._random_password_12())
+        self.ed_pass.selectAll()
+
+    def _on_copy(self) -> None:
+        pwd = self.ed_pass.text()
+        if not pwd:
+            return
+        try:
+            QApplication.clipboard().setText(pwd)
+        except Exception:
+            pass
 
 
 class ChangePasswordPlugin(plugins.Base):
     def __init__(self, plist=None, pane: QStackedWidget = None):
-        super().__init__("change_password", 21, plist, pane)
+        super().__init__("change_password", 30, plist, pane)
         if self.plist is not None and self.pane is not None:
             node = QStandardItem(self.tr("Change password"))
             node.setData(self.name)
