@@ -73,8 +73,10 @@ class PasswordWidget(QWidget):
         self.sp_d = QSpinBox(); self.sp_d.setRange(0,16); self.sp_d.setKeyboardTracking(False)
         self.sp_o = QSpinBox(); self.sp_o.setRange(0,16); self.sp_o.setKeyboardTracking(False)
         self.sp_remember = QSpinBox(); self.sp_remember.setRange(1,10); self.sp_remember.setKeyboardTracking(False)
+
         self.chk_user = QCheckBox(self.tr("Check username"))
         self.chk_gecos = QCheckBox(self.tr("Check GECOS"))
+        self.chk_dict = QCheckBox(self.tr("Dictionary check"))
         self.chk_root = QCheckBox(self.tr("Enforce for root"))
 
         form.addRow(self.tr("Minimum password length"), self.sp_min)
@@ -86,6 +88,7 @@ class PasswordWidget(QWidget):
         form.addRow(self.tr("Forbid reuse of last N passwords"), self.sp_remember)
         form.addRow(self.chk_user)
         form.addRow(self.chk_gecos)
+        form.addRow(self.chk_dict)
         form.addRow(self.chk_root)
         v.addLayout(form)
 
@@ -219,6 +222,7 @@ class PasswordWidget(QWidget):
             f"ocredit={-abs(int(st.get('req_o', 0)))}",
             f"usercheck={1 if st.get('usercheck', True) else 0}",
             f"gecoscheck={1 if st.get('gecoscheck', True) else 0}",
+            f"dictcheck={1 if st.get('dictcheck', True) else 0}",
             f"enforce_for_root={1 if st.get('root_enforce', False) else 0}",
         ]
         return " ".join(args)
@@ -445,6 +449,7 @@ class PasswordWidget(QWidget):
             "remember": self.sp_remember.value(),
             "usercheck": self.chk_user.isChecked(),
             "gecoscheck": self.chk_gecos.isChecked(),
+            "dictcheck": self.chk_dict.isChecked(),
             "root_enforce": self.chk_root.isChecked(),
         }
 
@@ -458,6 +463,7 @@ class PasswordWidget(QWidget):
         self.sp_remember.setValue(int(st.get("remember", self.sp_remember.value())))
         self.chk_user.setChecked(bool(st.get("usercheck", self.chk_user.isChecked())))
         self.chk_gecos.setChecked(bool(st.get("gecoscheck", self.chk_gecos.isChecked())))
+        self.chk_dict.setChecked(bool(st.get("dictcheck", self.chk_dict.isChecked())))
         self.chk_root.setChecked(bool(st.get("root_enforce", self.chk_root.isChecked())))
 
     def _on_groups_selection_changed(self):
@@ -483,8 +489,8 @@ class PasswordWidget(QWidget):
     def _update_controls_enabled(self):
         have_mod = (self._module_kind in ("pwquality","passwdqc"))
         for w in (self.sp_difok, self.sp_l, self.sp_u, self.sp_d, self.sp_o,
-                  self.chk_user, self.chk_gecos, self.chk_root,
-                  self.sp_remember, self.list_groups):
+                self.chk_user, self.chk_gecos, self.chk_dict, self.chk_root,
+                self.sp_remember, self.list_groups):
             w.setEnabled(have_mod)
         self.btn_enable_pwq.setVisible(not have_mod)
 
@@ -632,6 +638,7 @@ class PasswordWidget(QWidget):
                 "remember": gi("history_remember", 5),
                 "usercheck": gb("usercheck", True),
                 "gecoscheck": gb("gecoscheck", True),
+                "dictcheck": gb("dictcheck", True),
                 "root_enforce": gb("root_enforce", False),
             }
             self._group_state[self._active_group] = st
