@@ -46,8 +46,11 @@ class ChangePassword(QWidget):
         row.addWidget(self.ed_pass, 1)
 
         self.btn_copy = QPushButton(self.tr("Copy"))
+        self.btn_show = QPushButton(self.tr("Show"))
         self.btn_gen = QPushButton(self.tr("Generate"))
+
         row.addWidget(self.btn_copy)
+        row.addWidget(self.btn_show)
         row.addWidget(self.btn_gen)
 
         v.addLayout(row)
@@ -55,6 +58,7 @@ class ChangePassword(QWidget):
 
         self.btn_gen.clicked.connect(self._on_generate)
         self.btn_copy.clicked.connect(self._on_copy)
+        self.btn_show.clicked.connect(self._on_toggle_show)
 
     def _random_password_12(self) -> str:
         alphabet = string.ascii_letters + string.digits
@@ -72,6 +76,14 @@ class ChangePassword(QWidget):
             QApplication.clipboard().setText(pwd)
         except Exception:
             pass
+
+    def _on_toggle_show(self) -> None:
+        if self.ed_pass.echoMode() == QLineEdit.Password:
+            self.ed_pass.setEchoMode(QLineEdit.Normal)
+            self.btn_show.setText(self.tr("Hide"))
+        else:
+            self.ed_pass.setEchoMode(QLineEdit.Password)
+            self.btn_show.setText(self.tr("Show"))
 
 
 class ChangePasswordPlugin(plugins.Base):
