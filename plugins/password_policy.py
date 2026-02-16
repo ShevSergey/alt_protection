@@ -73,6 +73,7 @@ class PasswordWidget(QWidget):
         self.sp_d = QSpinBox(); self.sp_d.setRange(0,16); self.sp_d.setKeyboardTracking(False)
         self.sp_o = QSpinBox(); self.sp_o.setRange(0,16); self.sp_o.setKeyboardTracking(False)
         self.sp_remember = QSpinBox(); self.sp_remember.setRange(1,10); self.sp_remember.setKeyboardTracking(False)
+        self.sp_retry = QSpinBox(); self.sp_retry.setRange(2,5); self.sp_retry.setKeyboardTracking(False)
 
         self.chk_user = QCheckBox(self.tr("Check username"))
         self.chk_gecos = QCheckBox(self.tr("Check GECOS"))
@@ -85,6 +86,7 @@ class PasswordWidget(QWidget):
         form.addRow(self.tr("Minimum uppercase"), self.sp_u)
         form.addRow(self.tr("Minimum digits"), self.sp_d)
         form.addRow(self.tr("Minimum other characters"), self.sp_o)
+        form.addRow(self.tr("Password input attempts (retry)"), self.sp_retry)
         form.addRow(self.tr("Forbid reuse of last N passwords"), self.sp_remember)
         form.addRow(self.chk_user)
         form.addRow(self.chk_gecos)
@@ -137,6 +139,40 @@ class PasswordWidget(QWidget):
                     if not s or s.startswith("#") or ":" not in s: continue
                     k, v = s.split(":", 1); d[k.strip()] = v.strip()
         return d
+
+    def _pam_read_pwquality_opts(self) -> Dict[str, str]:
+        opts: Dict[str, str] = {}
+        p = PAM_DIR / "system-auth.protection-alt"
+        if not p.exists():
+            return opts
+        try:
+            text = p.read_text(encoding="utf-8", errors="ignore").splitlines()
+        except Exception:
+            return opts
+
+        for ln in text:
+            s = ln.strip()
+            if not s or s.startswith("#"):
+                continue
+            if "pam_pwquality.so" not in s:
+                continue
+            parts = s.split()
+            try:
+                i = parts.index("pam_pwquality.so")
+            except ValueError:
+                i = None
+                for j, t in enumerate(parts):
+                    if t.endswith("pam_pwquality.so"):
+                        i = j
+                        break
+                if i is None:
+                    continue
+            for tok in parts[i + 1:]:
+                if "=" in tok:
+                    k, v = tok.split("=", 1)
+                    opts[k.strip()] = v.strip()
+            break
+        return opts
 
     def _pwq_read(self) -> Dict[str, str]:
         cfg: Dict[str, str] = {}
@@ -213,7 +249,7 @@ class PasswordWidget(QWidget):
 
     def _pwq_args_from_state(self, st: Dict[str, Any]) -> str:
         args = [
-            "retry=3",
+            f"retry={int(st.get('retry', 3))}",
             f"minlen={int(st.get('minlen', 8))}",
             f"difok={int(st.get('difok', 3))}",
             f"lcredit={-abs(int(st.get('req_l', 0)))}",
@@ -446,6 +482,7 @@ class PasswordWidget(QWidget):
             "req_u": self.sp_u.value(),
             "req_d": self.sp_d.value(),
             "req_o": self.sp_o.value(),
+            "retry": self.sp_retry.value(),
             "remember": self.sp_remember.value(),
             "usercheck": self.chk_user.isChecked(),
             "gecoscheck": self.chk_gecos.isChecked(),
@@ -460,6 +497,7 @@ class PasswordWidget(QWidget):
         self.sp_u.setValue(int(st.get("req_u", self.sp_u.value())))
         self.sp_d.setValue(int(st.get("req_d", self.sp_d.value())))
         self.sp_o.setValue(int(st.get("req_o", self.sp_o.value())))
+        self.sp_retry.setValue(int(st.get("retry", self.sp_retry.value())))
         self.sp_remember.setValue(int(st.get("remember", self.sp_remember.value())))
         self.chk_user.setChecked(bool(st.get("usercheck", self.chk_user.isChecked())))
         self.chk_gecos.setChecked(bool(st.get("gecoscheck", self.chk_gecos.isChecked())))
@@ -489,15 +527,24 @@ class PasswordWidget(QWidget):
     def _update_controls_enabled(self):
         have_mod = (self._module_kind in ("pwquality","passwdqc"))
         for w in (self.sp_difok, self.sp_l, self.sp_u, self.sp_d, self.sp_o,
+                self.sp_retry,
                 self.chk_user, self.chk_gecos, self.chk_dict, self.chk_root,
                 self.sp_remember, self.list_groups):
             w.setEnabled(have_mod)
         self.btn_enable_pwq.setVisible(not have_mod)
 
     def _load(self):
+        retry_now = 3
+        try:
+            pam_opts = self._pam_read_pwquality_opts()
+            if "retry" in pam_opts:
+                retry_now = int(pam_opts["retry"])
+        except Exception:
+            retry_now = 3
+
         if self._module_kind == "pwquality":
             cfg = self._pwq_read()
-            def gi(name,d):
+            def gi(name, d):
                 try: return int(cfg.get(name, str(d)))
                 except Exception: return d
             self.sp_min.setValue(gi("minlen",8))
@@ -511,9 +558,12 @@ class PasswordWidget(QWidget):
             self.sp_o.setValue(req(cfg.get("ocredit","0")))
             self.chk_user.setChecked(gi("usercheck",1)!=0)
             self.chk_gecos.setChecked(gi("gecoscheck",1)!=0)
+            self.chk_dict.setChecked(gi("dictcheck",1)!=0)
             self.chk_root.setChecked(gi("enforce_for_root",0)!=0)
         else:
             self.sp_min.setValue(self._qc_read_min())
+
+        self.sp_retry.setValue(max(2, min(5, int(retry_now))))
 
         d = self._read_defaults_yml()
         try:
@@ -635,6 +685,7 @@ class PasswordWidget(QWidget):
                 "req_u": gi("req_u", 0),
                 "req_d": gi("req_d", 0),
                 "req_o": gi("req_o", 0),
+                "retry": gi("retry", 3),
                 "remember": gi("history_remember", 5),
                 "usercheck": gb("usercheck", True),
                 "gecoscheck": gb("gecoscheck", True),
