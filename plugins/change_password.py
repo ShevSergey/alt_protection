@@ -26,7 +26,9 @@ class ChangePassword(QWidget):
         super().__init__()
         if palette:
             self.setPalette(palette)
+        self._active_user: Optional[str] = None
         self._build_ui()
+        self._reload_users()
 
     def _build_ui(self) -> None:
         v = QVBoxLayout(self)
@@ -36,6 +38,17 @@ class ChangePassword(QWidget):
         f.setBold(True)
         title.setFont(f)
         v.addWidget(title)
+
+        v.addWidget(QLabel(self.tr("Users:")))
+        self.list_users = QListWidget()
+        self.list_users.setSelectionMode(QListWidget.MultiSelection)
+        v.addWidget(self.list_users, 1)
+
+        self.lbl_active = QLabel(self.tr("Active user: —"))
+        fb = QFont()
+        fb.setBold(True)
+        self.lbl_active.setFont(fb)
+        v.addWidget(self.lbl_active)
 
         row = QHBoxLayout()
 
@@ -59,6 +72,72 @@ class ChangePassword(QWidget):
         self.btn_gen.clicked.connect(self._on_generate)
         self.btn_copy.clicked.connect(self._on_copy)
         self.btn_show.clicked.connect(self._on_toggle_show)
+        self.list_users.itemSelectionChanged.connect(self._on_users_selection_changed)
+
+    def _uid_min(self) -> int:
+        try:
+            with open("/etc/login.defs", "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    s = line.strip()
+                    if not s or s.startswith("#"):
+                        continue
+                    if s.upper().startswith("UID_MIN"):
+                        parts = s.split()
+                        if len(parts) >= 2 and parts[1].isdigit():
+                            return int(parts[1])
+        except Exception:
+            pass
+        return 1000
+
+    def _list_users_all(self) -> List[Tuple[str, int]]:
+        users: List[Tuple[str, int]] = []
+        try:
+            with open("/etc/passwd", "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    s = line.strip()
+                    if not s or s.startswith("#"):
+                        continue
+                    parts = s.split(":")
+                    if len(parts) < 7:
+                        continue
+                    name = parts[0]
+                    try:
+                        uid = int(parts[2])
+                    except Exception:
+                        continue
+                    users.append((name, uid))
+        except Exception:
+            pass
+        return users
+
+    def _reload_users(self):
+        self.list_users.clear()
+        uid_min = self._uid_min()
+
+        for name, uid in sorted(self._list_users_all(), key=lambda t: (t[1], t[0])):
+            if uid < uid_min:
+                continue
+            it = QListWidgetItem(f"{name} (uid {uid})")
+            it.setData(Qt.UserRole, name)
+            self.list_users.addItem(it)
+
+        if self.list_users.count() > 0:
+            self._active_user = str(self.list_users.item(0).data(Qt.UserRole))
+            self.lbl_active.setText(self.tr("Active user: ") + self._active_user)
+            self.list_users.item(0).setSelected(True)
+        else:
+            self._active_user = None
+            self.lbl_active.setText(self.tr("Active user: —"))
+
+    def _on_users_selection_changed(self):
+        items = self.list_users.selectedItems()
+        if not items:
+            self._active_user = None
+            self.lbl_active.setText(self.tr("Active user: —"))
+            return
+        last = items[-1]
+        self._active_user = str(last.data(Qt.UserRole))
+        self.lbl_active.setText(self.tr("Active user: ") + self._active_user)
 
     def _random_password_12(self) -> str:
         alphabet = string.ascii_letters + string.digits
