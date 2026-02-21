@@ -67,12 +67,39 @@ class ChangePassword(QWidget):
         row.addWidget(self.btn_gen)
 
         v.addLayout(row)
+
+        row2 = QHBoxLayout()
+
+        self.ed_new = QLineEdit()
+        self.ed_new.setEchoMode(QLineEdit.Password)
+        self.ed_new.setPlaceholderText(self.tr("Enter new password"))
+        row2.addWidget(self.ed_new, 1)
+
+        self.btn_change = QPushButton(self.tr("Change"))
+        row2.addWidget(self.btn_change)
+
+        v.addLayout(row2)
         v.addStretch(1)
 
         self.btn_gen.clicked.connect(self._on_generate)
         self.btn_copy.clicked.connect(self._on_copy)
         self.btn_show.clicked.connect(self._on_toggle_show)
+        self.btn_change.clicked.connect(self._on_change_password)
         self.list_users.itemSelectionChanged.connect(self._on_users_selection_changed)
+
+    def _is_root(self) -> bool:
+        try:
+            return os.geteuid() == 0
+        except Exception:
+            return False
+
+    def _selected_users(self) -> List[str]:
+        out: List[str] = []
+        for it in self.list_users.selectedItems():
+            u = it.data(Qt.UserRole)
+            if u:
+                out.append(str(u))
+        return sorted(set(out))
 
     def _uid_min(self) -> int:
         try:
@@ -163,6 +190,28 @@ class ChangePassword(QWidget):
         else:
             self.ed_pass.setEchoMode(QLineEdit.Password)
             self.btn_show.setText(self.tr("Show"))
+
+    def _on_change_password(self) -> None:
+        if not self._is_root():
+            QMessageBox.critical(self, self.tr("Error"), self.tr("Insufficient privileges. Run via pkexec."))
+            return
+
+        users = self._selected_users()
+        if not users:
+            return
+
+        pwd = self.ed_new.text()
+        if not pwd:
+            return
+
+        try:
+            data = "".join(f"{u}:{pwd}\n" for u in users).encode("utf-8")
+            p = subprocess.run(["chpasswd"], input=data, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+            if p.returncode != 0:
+                err = (p.stderr or b"").decode("utf-8", errors="ignore").strip()
+                QMessageBox.critical(self, self.tr("Error"), err or self.tr("Failed to set password."))
+        except Exception as e:
+            QMessageBox.critical(self, self.tr("Error"), str(e))
 
 
 class ChangePasswordPlugin(plugins.Base):
