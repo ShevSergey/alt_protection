@@ -48,6 +48,7 @@ class ChangePassword(QWidget):
         fb = QFont()
         fb.setBold(True)
         self.lbl_active.setFont(fb)
+        self.lbl_active.setWordWrap(True)
         v.addWidget(self.lbl_active)
 
         row = QHBoxLayout()
@@ -75,7 +76,10 @@ class ChangePassword(QWidget):
         self.ed_new.setPlaceholderText(self.tr("Enter new password"))
         row2.addWidget(self.ed_new, 1)
 
+        self.btn_show_new = QPushButton(self.tr("Show"))
         self.btn_change = QPushButton(self.tr("Change"))
+
+        row2.addWidget(self.btn_show_new)
         row2.addWidget(self.btn_change)
 
         v.addLayout(row2)
@@ -84,6 +88,7 @@ class ChangePassword(QWidget):
         self.btn_gen.clicked.connect(self._on_generate)
         self.btn_copy.clicked.connect(self._on_copy)
         self.btn_show.clicked.connect(self._on_toggle_show)
+        self.btn_show_new.clicked.connect(self._on_toggle_show_new)
         self.btn_change.clicked.connect(self._on_change_password)
         self.list_users.itemSelectionChanged.connect(self._on_users_selection_changed)
 
@@ -149,12 +154,8 @@ class ChangePassword(QWidget):
             self.list_users.addItem(it)
 
         if self.list_users.count() > 0:
-            self._active_user = str(self.list_users.item(0).data(Qt.UserRole))
-            self.lbl_active.setText(self.tr("Active user: ") + self._active_user)
             self.list_users.item(0).setSelected(True)
-        else:
-            self._active_user = None
-            self.lbl_active.setText(self.tr("Active user: —"))
+        self._on_users_selection_changed()
 
     def _on_users_selection_changed(self):
         items = self.list_users.selectedItems()
@@ -164,7 +165,8 @@ class ChangePassword(QWidget):
             return
         last = items[-1]
         self._active_user = str(last.data(Qt.UserRole))
-        self.lbl_active.setText(self.tr("Active user: ") + self._active_user)
+        users = [str(it.data(Qt.UserRole)) for it in items if it.data(Qt.UserRole)]
+        self.lbl_active.setText(self.tr("Active user: ") + ", ".join(users))
 
     def _random_password_12(self) -> str:
         alphabet = string.ascii_letters + string.digits
@@ -191,6 +193,14 @@ class ChangePassword(QWidget):
             self.ed_pass.setEchoMode(QLineEdit.Password)
             self.btn_show.setText(self.tr("Show"))
 
+    def _on_toggle_show_new(self) -> None:
+        if self.ed_new.echoMode() == QLineEdit.Password:
+            self.ed_new.setEchoMode(QLineEdit.Normal)
+            self.btn_show_new.setText(self.tr("Hide"))
+        else:
+            self.ed_new.setEchoMode(QLineEdit.Password)
+            self.btn_show_new.setText(self.tr("Show"))
+
     def _on_change_password(self) -> None:
         if not self._is_root():
             QMessageBox.critical(self, self.tr("Error"), self.tr("Insufficient privileges. Run via pkexec."))
@@ -210,6 +220,8 @@ class ChangePassword(QWidget):
             if p.returncode != 0:
                 err = (p.stderr or b"").decode("utf-8", errors="ignore").strip()
                 QMessageBox.critical(self, self.tr("Error"), err or self.tr("Failed to set password."))
+                return
+            QMessageBox.information(self, self.tr("Done"), self.tr("Password changed."))
         except Exception as e:
             QMessageBox.critical(self, self.tr("Error"), str(e))
 
