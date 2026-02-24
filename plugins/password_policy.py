@@ -63,6 +63,7 @@ class PasswordWidget(QWidget):
         v.addWidget(self.list_groups, 1)
         self.lbl_active = QLabel(self.tr("Active group: —"))
         f = QFont(); f.setBold(True); self.lbl_active.setFont(f)
+        self.lbl_active.setWordWrap(True)
         v.addWidget(self.lbl_active)
 
         form = QFormLayout()
@@ -466,8 +467,8 @@ class PasswordWidget(QWidget):
             self.list_groups.addItem(it)
 
         self._active_group = "*ALL*"
-        self.lbl_active.setText(self.tr("Active group: All groups"))
         self.list_groups.item(0).setSelected(True)
+        self._on_groups_selection_changed()
 
     def _selected_groups(self) -> List[str]:
         sel = [it.data(Qt.UserRole) for it in self.list_groups.selectedItems()]
@@ -513,10 +514,38 @@ class PasswordWidget(QWidget):
             self._active_group = None
             self.lbl_active.setText(self.tr("Active group: —"))
             return
-        last = items[-1]
-        key = last.data(Qt.UserRole)
-        self._active_group = "*ALL*" if key == "__ALL__" else str(key)
-        self.lbl_active.setText(self.tr("Active group: ") + (self.tr("All groups") if self._active_group=="*ALL*" else self._active_group))
+
+        cur = self.list_groups.currentItem()
+        cur_key = cur.data(Qt.UserRole) if cur else None
+
+        keys = [it.data(Qt.UserRole) for it in items]
+        all_on = "__ALL__" in keys
+
+        if all_on and len(keys) > 1:
+            self.list_groups.blockSignals(True)
+            if cur_key == "__ALL__":
+                for i in range(1, self.list_groups.count()):
+                    self.list_groups.item(i).setSelected(False)
+                self.list_groups.item(0).setSelected(True)
+            else:
+                self.list_groups.item(0).setSelected(False)
+            self.list_groups.blockSignals(False)
+            items = self.list_groups.selectedItems()
+            if not items:
+                self._active_group = None
+                self.lbl_active.setText(self.tr("Active group: —"))
+                return
+            keys = [it.data(Qt.UserRole) for it in items]
+            all_on = "__ALL__" in keys
+
+        if all_on:
+            self._active_group = "*ALL*"
+            self.lbl_active.setText(self.tr("Active group: ") + self.tr("All groups"))
+        else:
+            last = cur if cur in items else items[-1]
+            self._active_group = str(last.data(Qt.UserRole))
+            groups = [str(k) for k in keys if k and k != "__ALL__"]
+            self.lbl_active.setText(self.tr("Active group: ") + ", ".join(groups))
 
         st = self._group_state.get(self._active_group)
         if st is None:
