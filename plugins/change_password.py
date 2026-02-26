@@ -201,6 +201,130 @@ class ChangePassword(QWidget):
             self.ed_new.setEchoMode(QLineEdit.Password)
             self.btn_show_new.setText(self.tr("Show"))
 
+    def _policies_read(self) -> Dict[str, Dict[str, Any]]:
+        p = Path("/etc/security/protection-alt/password_policies.yml")
+        if not p.exists():
+            return {}
+        try:
+            import yaml
+            with p.open("r", encoding="utf-8") as f:
+                obj = yaml.safe_load(f) or {}
+                if isinstance(obj, dict):
+                    return {str(k): v for k, v in obj.items() if isinstance(v, dict)}
+        except Exception:
+            pass
+        try:
+            import json
+            with p.open("r", encoding="utf-8") as f:
+                obj = json.load(f) or {}
+                if isinstance(obj, dict):
+                    return {str(k): v for k, v in obj.items() if isinstance(v, dict)}
+        except Exception:
+            pass
+        return {}
+
+    def _groups_for_user(self, user: str) -> List[str]:
+        gid = None
+        try:
+            with open("/etc/passwd", "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    parts = line.strip().split(":")
+                    if len(parts) >= 4 and parts[0] == user:
+                        try: gid = int(parts[3])
+                        except Exception: gid = None
+                        break
+        except Exception:
+            gid = None
+
+        groups: List[str] = []
+        try:
+            with open("/etc/group", "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    parts = line.strip().split(":")
+                    if len(parts) < 4:
+                        continue
+                    name = parts[0]
+                    try:
+                        g = int(parts[2])
+                    except Exception:
+                        continue
+                    members = parts[3].split(",") if parts[3] else []
+                    if gid is not None and g == gid:
+                        groups.append(name)
+                    elif user in members:
+                        groups.append(name)
+        except Exception:
+            pass
+
+        return sorted(set(groups))
+
+    def _policy_for_user(self, user: str) -> Dict[str, Any]:
+        mp = self._policies_read()
+        if not mp:
+            return {}
+        for g in self._groups_for_user(user):
+            st = mp.get(g)
+            if isinstance(st, dict):
+                return st
+        st = mp.get("*ALL*")
+        return st if isinstance(st, dict) else {}
+
+    def _check_password_for_user(self, user: str, pwd: str) -> bool:
+        st = self._policy_for_user(user)
+
+        def gi(k: str, d: int) -> int:
+            try: return int(st.get(k, d))
+            except Exception: return d
+
+        def gb(k: str, d: bool) -> bool:
+            v = st.get(k, d)
+            if isinstance(v, bool): return v
+            if isinstance(v, str): return v.lower() in ("1", "true", "yes", "on")
+            return bool(v) if isinstance(v, int) else d
+
+        minlen = gi("minlen", 6)
+        req_l = gi("req_l", 0)
+        req_u = gi("req_u", 0)
+        req_d = gi("req_d", 0)
+        req_o = gi("req_o", 0)
+        usercheck = gb("usercheck", False)
+        gecoscheck = gb("gecoscheck", False)
+
+        if len(pwd) < minlen:
+            return False
+
+        lc = sum(1 for c in pwd if c.islower())
+        uc = sum(1 for c in pwd if c.isupper())
+        dc = sum(1 for c in pwd if c.isdigit())
+        oc = sum(1 for c in pwd if (not c.isalnum()))
+
+        if lc < req_l or uc < req_u or dc < req_d or oc < req_o:
+            return False
+
+        if usercheck:
+            if user.lower() in pwd.lower():
+                return False
+
+        if gecoscheck:
+            gecos = ""
+            try:
+                with open("/etc/passwd", "r", encoding="utf-8", errors="ignore") as f:
+                    for line in f:
+                        parts = line.strip().split(":")
+                        if len(parts) >= 5 and parts[0] == user:
+                            gecos = parts[4] or ""
+                            break
+            except Exception:
+                gecos = ""
+            if gecos:
+                tokens = [t for t in re.split(r"[^A-Za-zА-Яа-я0-9]+", gecos) if t]
+                lp = pwd.lower()
+                for t in tokens:
+                    if len(t) >= 3 and t.lower() in lp:
+                        return False
+
+        return True
+
     def _on_change_password(self) -> None:
         if not self._is_root():
             QMessageBox.critical(self, self.tr("Error"), self.tr("Insufficient privileges. Run via pkexec."))
@@ -214,6 +338,15 @@ class ChangePassword(QWidget):
         if not pwd:
             return
 
+        bad = []
+        for u in users:
+            if not self._check_password_for_user(u, pwd):
+                bad.append(f"{u}: {self.tr('Поменяйте пароль')}")
+
+        if bad:
+            QMessageBox.warning(self, self.tr("Error"), "\n".join(bad))
+            return
+
         try:
             data = "".join(f"{u}:{pwd}\n" for u in users).encode("utf-8")
             p = subprocess.run(["chpasswd"], input=data, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
@@ -221,7 +354,7 @@ class ChangePassword(QWidget):
                 err = (p.stderr or b"").decode("utf-8", errors="ignore").strip()
                 QMessageBox.critical(self, self.tr("Error"), err or self.tr("Failed to set password."))
                 return
-            QMessageBox.information(self, self.tr("Done"), self.tr("Password changed."))
+            QMessageBox.information(self, self.tr("Done"), self.tr("Пароль сменен"))
         except Exception as e:
             QMessageBox.critical(self, self.tr("Error"), str(e))
 
