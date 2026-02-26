@@ -341,7 +341,7 @@ class ChangePassword(QWidget):
         bad = []
         for u in users:
             if not self._check_password_for_user(u, pwd):
-                bad.append(f"{u}: {self.tr('Поменяйте пароль')}")
+                bad.append(f"{u}: {self.tr('Change password')}")
 
         if bad:
             QMessageBox.warning(self, self.tr("Error"), "\n".join(bad))
@@ -354,7 +354,7 @@ class ChangePassword(QWidget):
                 err = (p.stderr or b"").decode("utf-8", errors="ignore").strip()
                 QMessageBox.critical(self, self.tr("Error"), err or self.tr("Failed to set password."))
                 return
-            QMessageBox.information(self, self.tr("Done"), self.tr("Пароль сменен"))
+            QMessageBox.information(self, self.tr("Done"), self.tr("The password has been changed"))
         except Exception as e:
             QMessageBox.critical(self, self.tr("Error"), str(e))
 
